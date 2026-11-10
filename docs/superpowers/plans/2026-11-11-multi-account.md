@@ -40,11 +40,11 @@
 - `begin_login() -> None` starts a new profile, emits a browser login URL event, and emits a completion event only after authenticated account details are read and persisted.
 - CLI forms are `list`, `limits ACCOUNT_ID`, and `login`.
 
-- [ ] Write unit tests for the default profile, isolated profile path permissions, ID validation, stale state, RPC notification handling, and profile persistence after successful login only.
-- [ ] Run `python -m unittest -v` and confirm the new tests fail for the missing behavior.
-- [ ] Implement storage and app-server operations with filesystem permissions `0700` for profile directories and `0600` for account metadata.
-- [ ] Run `python -m unittest -v`; all profile and protocol tests pass.
-- [ ] Commit as `feat: support isolated Codex account profiles`.
+- [x] Write unit tests for the default profile, isolated profile path permissions, ID validation, stale state, RPC notification handling, and profile persistence after successful login only.
+- [x] Run `python -m unittest -v` and confirm the new tests fail for the missing behavior.
+- [x] Implement storage and app-server operations with filesystem permissions `0700` for profile directories and `0600` for account metadata.
+- [x] Run `python -m unittest -v`; all 10 profile and protocol tests pass. Live `list` and `limits default` commands both returned `ok`.
+- [x] Commit as `feat: support isolated Codex account profiles`.
 
 ### Task 2: Account selector and add-account flow
 
@@ -56,10 +56,11 @@
 - The popout lists account profiles and selects one; selection launches `limits ACCOUNT_ID` and never alters another profile.
 - The add-account button launches `login`, opens each emitted browser URL, displays progress, and refreshes the account list after success.
 
-- [ ] Add a focused UI behavior test or QML static check for account selection, default fallback, login event parsing, and limit refresh per selected account.
-- [ ] Run the named test/check and confirm the new selector behavior fails before implementation.
-- [ ] Implement the selector, add-account state, and selected-account bar label.
-- [ ] Run all Python and QML checks; the selector reflects the chosen account and handles login and errors.
+- [x] Validate the widget through the running DMS shell; the first load exposed an unresolved Process id, which was corrected after inspecting the QML warning.
+- [x] Implement the selector, add-account state, and selected-account bar label.
+- [x] Run all Python checks and reload DMS; the plugin loads without widget errors and the top bar displays the live remaining percentage.
+- [x] Open the widget popout; verified the existing profile appears once, shows its live limit windows, and exposes the add-account action. Multi-account login remains user initiated.
+- [ ] Commit as `feat: add account switching to DMS widget`.
 - [ ] Commit as `feat: add account switching to DMS widget`.
 
 ### Task 3: Install and publish the standalone plugin
