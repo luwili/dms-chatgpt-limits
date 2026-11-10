@@ -70,8 +70,8 @@
 - Create: `LICENSE`
 - Install: `~/.config/dms/plugins/chatgptLimits/`
 
-- [ ] Document manual installation, first-account behavior, additional-account login, supported limit data, and credential locations.
-- [ ] Validate manifest JSON and run the helper's read-only list command.
-- [ ] Install the finished files to the active DMS plugin directory and restart DMS; inspect logs for plugin load or QML errors.
+- [x] Document manual installation, first-account behavior, additional-account login, supported limit data, and credential locations.
+- [x] Validate manifest JSON and run the helper's read-only list command.
+- [x] Install the finished files to the active DMS plugin directory and restart DMS; inspect logs and open the popout to confirm the widget loads with live limits.
 - [ ] Commit as `docs: package and document DMS ChatGPT limits plugin`.
 - [ ] Create public repository `luwili/dms-chatgpt-limits`, push the committed source, and verify the default branch and file list on GitHub.

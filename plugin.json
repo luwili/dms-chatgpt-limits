@@ -1,9 +1,9 @@
 {
   "id": "chatgptLimits",
   "name": "ChatGPT Limits",
-  "description": "Shows Codex usage limits from your signed-in ChatGPT account",
-  "version": "1.0.0",
-  "author": "Local",
+  "description": "Shows Codex usage limits for multiple ChatGPT accounts",
+  "version": "1.1.0",
+  "author": "luwili",
   "type": "widget",
   "capabilities": ["dankbar-widget"],
   "component": "./ChatGPTLimits.qml",
