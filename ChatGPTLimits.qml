@@ -11,10 +11,19 @@ PluginComponent {
 
     layerNamespacePlugin: "chatgpt-limits"
 
+    property var accounts: [{ id: "default", label: "Основной Codex", authenticated: false }]
     property var limitData: null
-    property string statusMessage: "Загружаю лимиты…"
+    property string statusMessage: "Загружаю аккаунты…"
     property bool loading: false
+    property bool loginInProgress: false
     property int refreshInterval: 300000
+    property string selectedAccountId: pluginData.selectedAccount || "default"
+
+    readonly property var selectedAccount: {
+        const found = accounts.find(account => account.id === selectedAccountId);
+        return found || accounts[0] || { id: "default", label: "Основной Codex" };
+    }
+    readonly property string selectedAccountLabel: selectedAccount.email || selectedAccount.label || "Основной Codex"
 
     Timer {
         interval: root.refreshInterval
@@ -23,58 +32,160 @@ PluginComponent {
         onTriggered: root.refreshLimits()
     }
 
-    Component.onCompleted: Qt.callLater(root.refreshLimits)
+    Component.onCompleted: Qt.callLater(root.refreshAccounts)
+
+    function helperPath() {
+        if (!pluginService || !pluginId)
+            return "";
+        const directory = pluginService.getPluginPath(pluginId);
+        return directory ? directory + "/fetch_limits.py" : "";
+    }
+
+    function runHelper(mode, args) {
+        const scriptPath = helperPath();
+        if (!scriptPath) {
+            statusMessage = "Не удалось найти файлы плагина";
+            return null;
+        }
+        const process = helperProcessComponent.createObject(root, {
+            scriptPath: scriptPath,
+            helperArgs: args,
+            requestMode: mode
+        });
+        if (!process)
+            return null;
+        process.running = true;
+        return process;
+    }
+
+    function refreshAccounts() {
+        runHelper("list", ["list"]);
+    }
 
     function refreshLimits() {
-        if (loading)
+        if (loading || loginInProgress)
             return;
-
-        if (!pluginService || !pluginId) {
-            statusMessage = "Плагин ещё запускается"
-            return;
-        }
-
-        const directory = pluginService.getPluginPath(pluginId);
-        if (!directory) {
-            statusMessage = "Не удалось найти файлы плагина"
+        if (!accounts.length) {
+            refreshAccounts();
             return;
         }
-
         loading = true;
         statusMessage = "Обновляю лимиты…";
-        const request = requestComponent.createObject(root, { scriptPath: directory + "/fetch_limits.py" });
-        request.running = true;
+        limitData = null;
+        if (!runHelper("limits", ["limits", selectedAccountId]))
+            loading = false;
     }
 
-    function handleResponse(rawText) {
-        loading = false;
-        try {
-            const response = JSON.parse(rawText.trim());
-            if (!response.ok) {
-                statusMessage = response.error || "Не удалось получить лимиты";
-                return;
-            }
-            limitData = response;
-            statusMessage = response.limits.length ? "Данные из аккаунта Codex" : "Аккаунт не вернул данные о лимитах";
-        } catch (error) {
-            statusMessage = "Не удалось разобрать ответ Codex";
+    function selectAccount(accountId) {
+        const account = accounts.find(item => item.id === accountId);
+        if (!account)
+            return;
+        selectedAccountId = accountId;
+        limitData = null;
+        if (pluginService && pluginId)
+            pluginService.savePluginData(pluginId, "selectedAccount", accountId);
+        refreshLimits();
+    }
+
+    function beginLogin() {
+        if (loginInProgress || loading)
+            return;
+        loginInProgress = true;
+        statusMessage = "Создаю отдельный профиль Codex…";
+        if (!runHelper("login", ["login"]))
+            loginInProgress = false;
+    }
+
+    function consumeOutput(process, fullText) {
+        const chunk = fullText.substring(process.outputOffset);
+        process.outputOffset = fullText.length;
+        process.outputBuffer += chunk;
+
+        let newline = process.outputBuffer.indexOf("\n");
+        while (newline >= 0) {
+            const line = process.outputBuffer.substring(0, newline).trim();
+            process.outputBuffer = process.outputBuffer.substring(newline + 1);
+            if (line)
+                handleHelperLine(process, line);
+            newline = process.outputBuffer.indexOf("\n");
         }
     }
 
-    function handleProcessExit(exitCode) {
-        loading = false;
-        if (exitCode !== 0 && !limitData)
-            statusMessage = "Не удалось запустить Codex. Проверь, что команда codex доступна.";
+    function handleHelperLine(process, line) {
+        let message;
+        try {
+            message = JSON.parse(line);
+        } catch (error) {
+            console.warn("ChatGPT Limits returned invalid JSON:", error);
+            return;
+        }
+
+        if (message.ok === false || message.event === "login_error") {
+            statusMessage = message.error || "Не удалось выполнить запрос Codex";
+            if (process.requestMode === "login")
+                loginInProgress = false;
+            if (process.requestMode === "limits")
+                loading = false;
+            return;
+        }
+
+        if (process.requestMode === "list") {
+            if (!Array.isArray(message.accounts)) {
+                statusMessage = "Codex вернул неверный список аккаунтов";
+                return;
+            }
+            accounts = message.accounts;
+            const stillAvailable = accounts.some(account => account.id === selectedAccountId);
+            if (!stillAvailable) {
+                selectedAccountId = "default";
+                if (pluginService && pluginId)
+                    pluginService.savePluginData(pluginId, "selectedAccount", "default");
+            }
+            statusMessage = accounts.length ? "Выбери аккаунт для просмотра лимита" : "Аккаунты не найдены";
+            if (!loginInProgress)
+                refreshLimits();
+            return;
+        }
+
+        if (process.requestMode === "limits") {
+            loading = false;
+            if (message.accountId !== selectedAccountId) {
+                refreshLimits();
+                return;
+            }
+            limitData = message;
+            statusMessage = message.limits.length ? "Данные из выбранного аккаунта" : "Аккаунт не вернул данные о лимитах";
+            return;
+        }
+
+        if (process.requestMode === "login" && message.event === "login_started") {
+            statusMessage = "Заверши вход в открывшемся окне браузера";
+            Quickshell.execDetached(["xdg-open", message.authUrl]);
+            return;
+        }
+
+        if (process.requestMode === "login" && message.event === "login_completed") {
+            loginInProgress = false;
+            statusMessage = "Аккаунт добавлен: " + (message.email || "ChatGPT");
+            selectedAccountId = message.profileId;
+            if (pluginService && pluginId)
+                pluginService.savePluginData(pluginId, "selectedAccount", message.profileId);
+            refreshAccounts();
+        }
     }
 
-    function limitTitle(limit) {
-        if (limit.name)
-            return limit.name;
-        if (limit.id === "codex")
-            return "Основной лимит";
-        if (limit.id === "codex_other")
-            return "Дополнительный лимит";
-        return limit.id;
+    function finishHelper(process, exitCode) {
+        if (process.outputBuffer.trim())
+            handleHelperLine(process, process.outputBuffer.trim());
+        if (process.requestMode === "login" && exitCode !== 0) {
+            loginInProgress = false;
+            if (statusMessage === "Заверши вход в открывшемся окне браузера")
+                statusMessage = "Вход не завершён. Попробуй добавить аккаунт ещё раз.";
+        } else if (process.requestMode === "limits" && exitCode !== 0) {
+            loading = false;
+        } else if (process.requestMode === "list" && exitCode !== 0 && !accounts.length) {
+            statusMessage = "Не удалось запустить Codex. Проверь установку Codex CLI.";
+        }
     }
 
     function remainingText(window) {
@@ -87,6 +198,16 @@ PluginComponent {
         if (!window || !window.resetsAt)
             return "Время сброса не указано";
         return "Сброс " + Qt.formatDateTime(new Date(Number(window.resetsAt) * 1000), "dd.MM, HH:mm");
+    }
+
+    function limitTitle(limit) {
+        if (limit.name)
+            return limit.name;
+        if (limit.id === "codex")
+            return "Основной лимит";
+        if (limit.id === "codex_other")
+            return "Дополнительный лимит";
+        return limit.id;
     }
 
     function windowName(window, fallback) {
@@ -105,14 +226,21 @@ PluginComponent {
     }
 
     Component {
-        id: requestComponent
+        id: helperProcessComponent
 
         Process {
+            id: helperProcess
             property string scriptPath: ""
-            command: ["python3", scriptPath]
+            property var helperArgs: []
+            property string requestMode: ""
+            property int outputOffset: 0
+            property string outputBuffer: ""
+
+            command: ["python3", scriptPath].concat(helperArgs)
 
             stdout: StdioCollector {
-                onStreamFinished: root.handleResponse(text)
+                onTextChanged: root.consumeOutput(helperProcess, text)
+                onStreamFinished: root.consumeOutput(helperProcess, text)
             }
 
             stderr: StdioCollector {
@@ -123,7 +251,7 @@ PluginComponent {
             }
 
             onExited: exitCode => {
-                root.handleProcessExit(exitCode);
+                root.finishHelper(helperProcess, exitCode);
                 destroy();
             }
         }
@@ -174,14 +302,89 @@ PluginComponent {
 
     popoutContent: Component {
         PopoutComponent {
-            id: popout
             headerText: "Лимиты Codex"
-            detailsText: root.limitData?.limits?.length ? "План " + (root.limitData.limits[0].planType || "ChatGPT") : "Использование Codex в ChatGPT"
+            detailsText: root.selectedAccountLabel
             showCloseButton: true
 
             Column {
                 width: parent.width
                 spacing: Theme.spacingM
+
+                StyledText {
+                    width: parent.width
+                    text: "Аккаунт"
+                    color: Theme.surfaceVariantText
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.weight: Font.Medium
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: Theme.spacingXS
+
+                    Repeater {
+                        model: root.accounts
+
+                        delegate: StyledRect {
+                            required property var modelData
+                            width: parent.width
+                            height: 44
+                            radius: Theme.cornerRadius
+                            color: modelData.id === root.selectedAccountId ? Theme.surfaceContainerHighest : Theme.surfaceContainerHigh
+                            border.width: 0
+
+                            Row {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.rightMargin: Theme.spacingM
+                                spacing: Theme.spacingS
+
+                                DankIcon {
+                                    name: modelData.id === root.selectedAccountId ? "check_circle" : "account_circle"
+                                    size: Theme.iconSize - 6
+                                    color: modelData.id === root.selectedAccountId ? Theme.primary : Theme.surfaceVariantText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Column {
+                                    width: parent.width - Theme.iconSize - Theme.spacingS
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 1
+
+                                    StyledText {
+                                        width: parent.width
+                                        text: modelData.email || modelData.label || "Основной Codex"
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        elide: Text.ElideRight
+                                    }
+
+                                    StyledText {
+                                        width: parent.width
+                                        text: modelData.planType || (modelData.id === "default" ? "Системный профиль Codex" : "ChatGPT")
+                                        color: Theme.surfaceVariantText
+                                        font.pixelSize: Theme.fontSizeSmall - 1
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.selectAccount(modelData.id)
+                            }
+                        }
+                    }
+                }
+
+                DankButton {
+                    width: parent.width
+                    text: root.loginInProgress ? "Ожидаю вход в браузере…" : "Добавить аккаунт"
+                    iconName: "person_add"
+                    enabled: !root.loginInProgress && !root.loading
+                    onClicked: root.beginLogin()
+                }
 
                 StyledText {
                     width: parent.width
@@ -220,12 +423,14 @@ PluginComponent {
 
                                 Row {
                                     width: parent.width
+
                                     StyledText {
                                         width: parent.width * 0.55
                                         text: modelData.title
                                         color: Theme.surfaceVariantText
                                         font.pixelSize: Theme.fontSizeSmall
                                     }
+
                                     StyledText {
                                         width: parent.width * 0.45
                                         text: root.remainingText(modelData.value)
@@ -266,13 +471,14 @@ PluginComponent {
                     spacing: Theme.spacingS
 
                     DankButton {
-                        text: root.loading ? "Обновляю…" : "Обновить"
-                        enabled: !root.loading
+                        text: root.loading ? "Обновляю…" : "Обновить лимит"
+                        iconName: "refresh"
+                        enabled: !root.loading && !root.loginInProgress
                         onClicked: root.refreshLimits()
                     }
 
                     StyledText {
-                        width: parent.width - 110
+                        width: parent.width - 150
                         text: root.limitData?.fetchedAt ? "Обновлено " + Qt.formatDateTime(new Date(root.limitData.fetchedAt * 1000), "HH:mm") : ""
                         color: Theme.surfaceVariantText
                         font.pixelSize: Theme.fontSizeSmall - 1
@@ -282,7 +488,7 @@ PluginComponent {
 
                 StyledText {
                     width: parent.width
-                    text: "Данные Codex. Лимиты обычного чата ChatGPT могут учитываться отдельно."
+                    text: "Показываются лимиты Codex этого аккаунта; лимиты обычного чата ChatGPT могут учитываться отдельно."
                     color: Theme.surfaceVariantText
                     font.pixelSize: Theme.fontSizeSmall - 1
                     wrapMode: Text.WordWrap
@@ -291,6 +497,6 @@ PluginComponent {
         }
     }
 
-    popoutWidth: 360
-    popoutHeight: 360
+    popoutWidth: 380
+    popoutHeight: 540
 }

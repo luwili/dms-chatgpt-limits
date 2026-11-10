@@ -60,7 +60,7 @@
 - [x] Implement the selector, add-account state, and selected-account bar label.
 - [x] Run all Python checks and reload DMS; the plugin loads without widget errors and the top bar displays the live remaining percentage.
 - [x] Open the widget popout; verified the existing profile appears once, shows its live limit windows, and exposes the add-account action. Multi-account login remains user initiated.
-- [ ] Commit as `feat: add account switching to DMS widget`.
+- [x] Commit as `feat: add account switching to DMS widget`.
 - [ ] Commit as `feat: add account switching to DMS widget`.
 
 ### Task 3: Install and publish the standalone plugin
