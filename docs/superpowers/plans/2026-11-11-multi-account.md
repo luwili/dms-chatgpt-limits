@@ -73,4 +73,4 @@
 - [x] Validate manifest JSON and run the helper's read-only list command.
 - [x] Install the finished files to the active DMS plugin directory and restart DMS; inspect logs and open the popout to confirm the widget loads with live limits.
 - [x] Commit as `docs: package and document DMS ChatGPT limits plugin`.
-- [ ] Create public repository `luwili/dms-chatgpt-limits`, push the committed source, and verify the default branch and file list on GitHub.
+- [x] Create public repository `luwili/dms-chatgpt-limits`, push the committed source, and verify the default branch and file list on GitHub.
