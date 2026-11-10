@@ -37,7 +37,7 @@
 **Interfaces:**
 - `list_accounts() -> dict` returns the default profile plus registered additional profiles, with display identity and login state.
 - `fetch_limits(account_id: str) -> dict` reads limits using that profile's `CODEX_HOME`.
-- `begin_login() -> None` starts a new profile, emits a browser login URL event, and emits a completion event only after authenticated account details are read and persisted.
+- `begin_login() -> str` starts a new profile, emits a validated browser login URL event, and emits a completion event only after authenticated account details are read and persisted.
 - CLI forms are `list`, `limits ACCOUNT_ID`, and `login`.
 
 - [x] Write unit tests for the default profile, isolated profile path permissions, ID validation, stale state, RPC notification handling, and profile persistence after successful login only.
@@ -61,7 +61,6 @@
 - [x] Run all Python checks and reload DMS; the plugin loads without widget errors and the top bar displays the live remaining percentage.
 - [x] Open the widget popout; verified the existing profile appears once, shows its live limit windows, and exposes the add-account action. Multi-account login remains user initiated.
 - [x] Commit as `feat: add account switching to DMS widget`.
-- [ ] Commit as `feat: add account switching to DMS widget`.
 
 ### Task 3: Install and publish the standalone plugin
 
@@ -73,5 +72,5 @@
 - [x] Document manual installation, first-account behavior, additional-account login, supported limit data, and credential locations.
 - [x] Validate manifest JSON and run the helper's read-only list command.
 - [x] Install the finished files to the active DMS plugin directory and restart DMS; inspect logs and open the popout to confirm the widget loads with live limits.
-- [ ] Commit as `docs: package and document DMS ChatGPT limits plugin`.
+- [x] Commit as `docs: package and document DMS ChatGPT limits plugin`.
 - [ ] Create public repository `luwili/dms-chatgpt-limits`, push the committed source, and verify the default branch and file list on GitHub.

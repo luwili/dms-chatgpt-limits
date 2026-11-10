@@ -17,6 +17,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 
 CLIENT_INFO = {
@@ -26,6 +27,27 @@ CLIENT_INFO = {
 }
 PROFILE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 PROFILE_CONFIG = 'cli_auth_credentials_store = "file"\n'
+AUTH_URL_HOSTS = {"auth.openai.com", "chatgpt.com"}
+
+
+def validate_auth_url(auth_url: str) -> str:
+    """Allow only HTTPS login URLs on the known ChatGPT/OpenAI hosts."""
+    if not isinstance(auth_url, str) or any(ord(character) < 32 or ord(character) == 127 for character in auth_url):
+        raise ValueError("Codex вернул недопустимый адрес входа ChatGPT")
+    try:
+        parsed = urlsplit(auth_url)
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("Codex вернул недопустимый адрес входа ChatGPT") from error
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in AUTH_URL_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+    ):
+        raise ValueError("Codex вернул недопустимый адрес входа ChatGPT")
+    return auth_url
 
 
 def emit(payload: dict[str, Any]) -> None:
@@ -356,7 +378,6 @@ def list_accounts(
             {
                 **profile,
                 "label": profile["email"] or "Дополнительный аккаунт",
-                "authenticated": True,
             }
         )
     return {"ok": True, "accounts": [default_account, *additional_accounts]}
@@ -445,6 +466,7 @@ def begin_login(
         auth_url = login.get("authUrl")
         if not isinstance(login_id, str) or not isinstance(auth_url, str):
             raise RuntimeError("Codex не вернул данные для входа ChatGPT")
+        auth_url = validate_auth_url(auth_url)
         emit(
             {
                 "event": "login_started",

@@ -159,6 +159,7 @@ class AccountLookupTests(unittest.TestCase):
         self.assertEqual(result["accounts"][0]["email"], "first@example.com")
         self.assertTrue(result["accounts"][0]["authenticated"])
         self.assertEqual(result["accounts"][1]["email"], "second@example.com")
+        self.assertNotIn("authenticated", result["accounts"][1])
 
     def test_limits_reject_unregistered_profile_before_starting_server(self):
         def unexpected_server(home):
@@ -247,6 +248,56 @@ class LoginFlowTests(unittest.TestCase):
             )
 
         self.assertEqual(fetch_limits.load_profiles(data_dir=self.data_dir), [])
+
+    def test_login_rejects_untrusted_auth_url_before_emitting_or_waiting(self):
+        class FakeAppServer:
+            def __init__(self, home):
+                self.home = home
+
+            def request(self, method, params=None, **kwargs):
+                return {"loginId": "login-3", "authUrl": "https://malicious.example/login"}
+
+            def next_message(self, timeout):
+                raise AssertionError("An untrusted URL must be rejected before polling login")
+
+            def close(self):
+                pass
+
+        with self.assertRaisesRegex(ValueError, "адрес входа"):
+            fetch_limits.begin_login(
+                data_dir=self.data_dir,
+                default_home=self.default_home,
+                app_server_factory=FakeAppServer,
+                emit=self.events.append,
+            )
+
+        self.assertEqual(self.events, [])
+        self.assertEqual(fetch_limits.load_profiles(data_dir=self.data_dir), [])
+
+
+class AuthUrlValidationTests(unittest.TestCase):
+    def test_known_chatgpt_and_openai_login_hosts_are_allowed(self):
+        self.assertEqual(
+            fetch_limits.validate_auth_url("https://chatgpt.com/auth/login?flow=codex"),
+            "https://chatgpt.com/auth/login?flow=codex",
+        )
+        self.assertEqual(
+            fetch_limits.validate_auth_url("https://auth.openai.com/codex/device"),
+            "https://auth.openai.com/codex/device",
+        )
+
+    def test_non_https_untrusted_hosts_and_url_credentials_are_rejected(self):
+        bad_urls = [
+            "http://chatgpt.com/login",
+            "https://malicious.example/login",
+            "https://chatgpt.com.malicious.example/login",
+            "https://user@chatgpt.com/login",
+            "https://chatgpt.com:444/login",
+            "https://chatgpt.com/\nother",
+        ]
+        for url in bad_urls:
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                fetch_limits.validate_auth_url(url)
 
 
 if __name__ == "__main__":
