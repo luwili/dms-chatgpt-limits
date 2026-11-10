@@ -1,0 +1,12 @@
+{
+  "id": "chatgptLimits",
+  "name": "ChatGPT Limits",
+  "description": "Shows Codex usage limits from your signed-in ChatGPT account",
+  "version": "1.0.0",
+  "author": "Local",
+  "type": "widget",
+  "capabilities": ["dankbar-widget"],
+  "component": "./ChatGPTLimits.qml",
+  "icon": "speed",
+  "permissions": []
+}
