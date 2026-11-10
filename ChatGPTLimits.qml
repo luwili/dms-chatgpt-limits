@@ -188,10 +188,19 @@ PluginComponent {
         }
     }
 
+    function remainingPercent(window) {
+        if (!window || window.usedPercent === undefined || window.usedPercent === null)
+            return 0;
+        var usedPercent = Number(window.usedPercent);
+        if (!isFinite(usedPercent))
+            return 0;
+        return Math.max(0, Math.min(100, 100 - usedPercent));
+    }
+
     function remainingText(window) {
         if (!window || window.usedPercent === undefined || window.usedPercent === null)
             return "Нет данных";
-        return Math.max(0, 100 - Number(window.usedPercent)).toFixed(0) + "% осталось";
+        return remainingPercent(window).toFixed(0) + "% осталось";
     }
 
     function resetText(window) {
@@ -448,10 +457,10 @@ PluginComponent {
                                     border.width: 0
 
                                     StyledRect {
-                                        width: parent.width * Math.max(0, Math.min(100, Number(modelData.value.usedPercent || 0))) / 100
+                                        width: parent.width * root.remainingPercent(modelData.value) / 100
                                         height: parent.height
                                         radius: 3
-                                        color: Number(modelData.value.usedPercent || 0) >= 90 ? Theme.error : Theme.primary
+                                        color: root.remainingPercent(modelData.value) <= 10 ? Theme.error : Theme.primary
                                         border.width: 0
                                     }
                                 }
